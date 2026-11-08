@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghét Nhau Ném Đá 3D - Đấu Trường Quiz Siêu Cấp</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS for WebRTC Online Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@600;800;900&family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --comic-black: #1c1917; }
+        * { box-sizing: border-box; user-select: none; }
+        body { font-family: 'Be Vietnam Pro', sans-serif; background-color: #fef3c7; color: #1c1917; overflow: hidden; height: 100vh; width: 100vw; }
+        .font-comic { font-family: 'Fredoka', 'Be Vietnam Pro', sans-serif; }
+        .comic-box { border: 3px solid var(--comic-black); box-shadow: 4px 4px 0px var(--comic-black); }
+        .comic-box-lg { border: 4px solid var(--comic-black); box-shadow: 6px 6px 0px var(--comic-black); }
+        .comic-btn { border: 3px solid var(--comic-black); box-shadow: 0px 4px 0px var(--comic-black); transition: all 0.1s ease; cursor: pointer; }
+        .comic-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0px 6px 0px var(--comic-black); }
+        .comic-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0px 1px 0px var(--comic-black); }
+        .comic-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .text-stroke { text-shadow: -2px -2px 0 #1c1917, 2px -2px 0 #1c1917, -2px 2px 0 #1c1917, 2px 2px 0 #1c1917; }
+        .text-stroke-sm { text-shadow: -1px -1px 0 #1c1917, 1px -1px 0 #1c1917, -1px 1px 0 #1c1917, 1px 1px 0 #1c1917; }
+        
+        @keyframes charIdle { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-8px) rotate(-1.5deg); } }
+        .anim-idle { animation: charIdle 2s ease-in-out infinite; }
+        
+        @keyframes screenShake { 0%, 100% { transform: translate(0, 0); } 20% { transform: translate(-12px, 10px); } 40% { transform: translate(12px, -10px); } 60% { transform: translate(-8px, 6px); } 80% { transform: translate(8px, -6px); } }
+        .anim-shake { animation: screenShake 0.4s ease-in-out; }
+
+        @keyframes floatUp { 0% { transform: translateY(0) scale(0.8); opacity: 1; } 100% { transform: translateY(-90px) scale(1.4); opacity: 0; } }
+        .anim-float-up { animation: floatUp 0.9s ease-out forwards; }
+
+        @keyframes throwAnim {
+            0% { transform: translate(0, 0) scale(0.5) rotate(0deg); opacity: 0; }
+            20% { opacity: 1; }
+            100% { transform: translate(var(--dest-x), var(--dest-y)) scale(1.3) rotate(360deg); opacity: 1; }
+        }
+        .anim-throw { animation: throwAnim 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+
+        @keyframes cloudMove { from { transform: translateX(-150px); } to { transform: translateX(1800px); } }
+        .cloud-1 { animation: cloudMove 25s linear infinite; }
+        .cloud-2 { animation: cloudMove 35s linear infinite; animation-delay: -10s; }
+    </style>
+</head>
+<body class="flex flex-col justify-between bg-amber-100">
+
+    <!-- FX Layer for Dynamic Combat Visuals -->
+    <div id="fx-layer" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
+
+    <!-- Header Navigation -->
+    <header class="relative z-30 w-full bg-amber-400 border-b-4 border-stone-900 px-4 py-2.5 shadow-lg flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <span class="text-3xl transform -rotate-12 animate-bounce">🪨</span>
+            <h1 class="font-comic text-xl sm:text-2xl font-black text-white text-stroke tracking-wider uppercase">
+                Ghét Nhau Ném Đá 3D <span class="text-amber-200 text-xs bg-stone-900 px-2 py-0.5 rounded-full border border-stone-900">PRO ONLINE</span>
+            </h1>
+        </div>
+
+        <div id="top-room-badge" class="hidden items-center gap-2 bg-emerald-100 border-2 border-stone-900 rounded-xl px-3 py-1 shadow-sm">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+            <span class="text-xs font-extrabold text-stone-900">PHÒNG: <strong id="top-room-code" class="text-emerald-700 font-black">-----</strong></span>
+            <span id="role-badge" class="bg-amber-300 text-stone-900 text-[10px] font-black px-1.5 py-0.5 rounded border border-stone-900 ml-1">HOST</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button onclick="openLobbyModal()" class="comic-btn bg-amber-200 hover:bg-amber-100 text-stone-900 font-extrabold text-xs px-3 py-2 rounded-xl flex items-center gap-1">
+                🏠 Phòng Chờ
+            </button>
+            <button onclick="openQuestionModal()" class="comic-btn bg-sky-300 hover:bg-sky-200 text-stone-900 font-extrabold text-xs px-3 py-2 rounded-xl flex items-center gap-1">
+                📝 Kho Câu Hỏi
+            </button>
+            <button onclick="toggleSound()" id="btn-sound" class="comic-btn bg-amber-100 text-stone-900 font-extrabold text-xs px-3 py-2 rounded-xl">
+                🔊
+            </button>
+            <button onclick="resetFullGame(true)" class="comic-btn bg-rose-400 hover:bg-rose-300 text-white font-extrabold text-xs px-3 py-2 rounded-xl">
+                🔄 Ván Mới
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Game Arena -->
+    <main id="arena-container" class="relative flex-1 w-full overflow-hidden">
+        <!-- 3D Arena Background -->
+        <div class="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+            <svg class="w-full h-full" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#38bdf8"/>
+                        <stop offset="100%" stop-color="#bae6fd"/>
+                    </linearGradient>
+                    <linearGradient id="groundGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#fbbf24"/>
+                        <stop offset="100%" stop-color="#d97706"/>
+                    </linearGradient>
+                </defs>
+                <rect x="0" y="0" width="1600" height="420" fill="url(#skyGrad)"/>
+                <circle cx="1400" cy="100" r="65" fill="#fef08a" opacity="0.9" stroke="#1c1917" stroke-width="4"/>
+                <rect x="0" y="415" width="1600" height="485" fill="url(#groundGrad)" stroke="#1c1917" stroke-width="4"/>
+                <ellipse cx="800" cy="650" rx="600" ry="200" fill="#fde68a" opacity="0.4"/>
+            </svg>
+            <div class="absolute top-12 left-0 cloud-1 opacity-80 text-4xl select-none">☁️</div>
+            <div class="absolute top-28 left-0 cloud-2 opacity-60 text-5xl select-none">☁️</div>
+        </div>
+
+        <!-- Quiz HUD Section -->
+        <section id="quiz-hud-section" class="relative z-30 w-full max-w-xl mx-auto pt-3 px-3">
+            <div class="bg-amber-50/95 backdrop-blur-sm rounded-3xl comic-box-lg p-3.5 shadow-xl">
+                <div class="flex items-center justify-between pb-2 border-b-2 border-stone-900/20">
+                    <span id="round-badge" class="bg-stone-900 text-amber-300 font-comic font-black text-xs px-2.5 py-1 rounded-lg uppercase shadow">CÂU 1</span>
+                    <span id="question-topic" class="bg-amber-300 text-stone-900 text-xs font-black px-3 py-1 rounded-full border-2 border-stone-900 uppercase">Đố Vui Dân Gian</span>
+                    <span id="phase-status-text" class="text-xs font-black text-rose-600 animate-pulse">⚡ Bấm chuông (1-4) giành quyền!</span>
+                </div>
+                
+                <div class="w-full bg-stone-200 h-2.5 rounded-full border-2 border-stone-900 overflow-hidden my-2 shadow-inner">
+                    <div id="timer-bar" class="bg-emerald-500 h-full w-full transition-all duration-300"></div>
+                </div>
+
+                <div id="answering-banner" class="hidden mb-2 bg-emerald-400 border-2 border-stone-900 rounded-xl px-3 py-1.5 items-center justify-between shadow">
+                    <span id="answering-team-text" class="font-comic font-black text-xs text-stone-900 uppercase">🔔 GIÀNH QUYỀN TRẢ LỜI!</span>
+                    <span id="answer-countdown" class="bg-stone-900 text-amber-300 text-xs font-black px-2.5 py-0.5 rounded-full border border-stone-900">10s</span>
+                </div>
+
+                <h2 id="question-text" class="font-comic text-base sm:text-lg font-black text-stone-900 text-center my-2 leading-snug">Đang tải câu hỏi...</h2>
+                <div id="options-grid" class="grid grid-cols-2 gap-2 my-1.5"></div>
+                <div id="buzzer-grid" class="grid grid-cols-4 gap-2 pt-2.5 border-t-2 border-dashed border-stone-400 mt-2"></div>
+            </div>
+        </section>
+
+        <!-- 4 Team Cards Positioned on Arena Corners -->
+        <div class="absolute inset-0 pointer-events-none z-20">
+            <div id="team-card-0" class="absolute left-8 top-32 pointer-events-auto"></div>
+            <div id="team-card-1" class="absolute right-8 top-32 pointer-events-auto"></div>
+            <div id="team-card-2" class="absolute left-12 bottom-16 pointer-events-auto"></div>
+            <div id="team-card-3" class="absolute right-12 bottom-16 pointer-events-auto"></div>
+        </div>
+
+        <!-- Attack Dice Reel & Target Overlay -->
+        <div id="attack-overlay" class="hidden absolute right-6 bottom-20 z-40 w-80 bg-amber-100 rounded-3xl comic-box-lg p-4 flex-col items-center text-center pointer-events-auto shadow-2xl">
+            <h3 id="attack-attacker-title" class="font-comic text-sm font-black text-stone-900 mb-2">🎉 Hãy quay xúc xắc ném đồ!</h3>
+            <div class="w-full bg-white rounded-2xl comic-box p-3 flex flex-col items-center justify-center min-h-[130px] shadow-inner">
+                <div id="reel-weapon-svg" class="w-20 h-20 flex items-center justify-center transform hover:scale-110 transition-transform"></div>
+                <h4 id="reel-weapon-name" class="font-comic text-sm font-black text-stone-900 mt-2">Vũ khí...</h4>
+            </div>
+            <div class="mt-2.5 w-full bg-stone-900 text-amber-300 rounded-xl p-2 text-xs font-black flex items-center justify-center border-2 border-stone-900 shadow">
+                <span id="roulette-target-name" class="truncate">🎯 Đang ngắm mục tiêu...</span>
+            </div>
+            <button id="btn-roll-dice" onclick="startWeaponRollSequence()" class="mt-3 w-full comic-btn bg-rose-500 hover:bg-rose-400 text-white font-comic font-black text-sm py-2.5 px-4 rounded-2xl shadow">
+                🎲 QUAY XÚC XẮC NÉM ĐỒ!
+            </button>
+        </div>
+
+        <!-- Combat Log Bar -->
+        <div class="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-2xl bg-stone-900/95 text-amber-300 rounded-2xl border-3 border-stone-900 px-4 py-2 flex justify-between items-center text-xs shadow-xl">
+            <div class="flex items-center gap-2 truncate">
+                <span class="text-base">🎮</span>
+                <span id="combat-log-latest" class="truncate font-bold text-white">Chào mừng bạn đến với Ghét Nhau Ném Đá 3D Pro!</span>
+            </div>
+            <span class="hidden sm:inline text-[11px] text-amber-400 font-black shrink-0 bg-stone-800 px-2 py-0.5 rounded-lg border border-stone-700">⌨️ Phím 1-4: Bấm chuông</span>
+        </div>
+
+        <!-- Home Lobby & Character Customization Screen -->
+        <div id="home-lobby-screen" class="absolute inset-0 z-50 overflow-y-auto bg-amber-100 p-6 flex items-center justify-center">
+            <div class="max-w-4xl w-full bg-amber-50 rounded-3xl comic-box-lg p-6 shadow-2xl">
+                <div class="flex items-center justify-between mb-4 border-b-2 border-stone-900 pb-3">
+                    <h2 class="font-comic text-2xl font-black text-stone-900 flex items-center gap-2">
+                        <span>🏠</span> CHỌN NHÂN VẬT & TẠO PHÒNG ONLINE
+                    </h2>
+                    <span class="bg-stone-900 text-amber-300 text-xs font-black px-3 py-1 rounded-full border border-stone-900">4 Nhóm • 50 HP</span>
+                </div>
+
+                <!-- Online Room Control Panel -->
+                <div class="bg-gradient-to-r from-emerald-100 to-amber-100 rounded-2xl comic-box p-3.5 mb-5 flex flex-col sm:flex-row gap-3 justify-between items-center shadow">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <button onclick="createOnlineRoom()" class="comic-btn bg-emerald-400 hover:bg-emerald-300 font-black text-xs px-4 py-2.5 rounded-xl shadow shrink-0">
+                            👑 Tạo Phòng (Trọng Tài/Host)
+                        </button>
+                        <label class="flex items-center gap-1.5 bg-white border-2 border-stone-900 px-2.5 py-1.5 rounded-xl text-xs font-black cursor-pointer shadow-sm">
+                            <input type="checkbox" id="chk-spectator" onchange="toggleSpectatorMode(this.checked)" class="w-4 h-4 accent-emerald-600"/>
+                            <span>👁️ Chế độ Trọng tài (Spectator)</span>
+                        </label>
+                    </div>
+
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <input id="input-join-code" type="text" maxlength="5" placeholder="MÃ PHÒNG (VD: A1B2C)" class="bg-white border-2 border-stone-900 rounded-xl px-3 py-2 font-black text-xs uppercase text-center w-full sm:w-44 shadow-inner"/>
+                        <button onclick="joinOnlineRoom()" class="comic-btn bg-sky-400 hover:bg-sky-300 font-black text-xs px-4 py-2.5 rounded-xl shrink-0 shadow">
+                            🔗 Vào Phòng (Người chơi)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4 Character Cards -->
+                <div id="lobby-characters-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-5"></div>
+
+                <div class="flex flex-col sm:flex-row justify-between items-center bg-stone-900 text-white rounded-2xl p-4 gap-3 shadow-lg">
+                    <span class="text-xs font-bold text-amber-300 text-center sm:text-left">📌 Host làm Trọng tài / 4 Người chơi từ 4 máy khác nhau tham gia cùng mã phòng!</span>
+                    <button onclick="enterArenaFromHome()" class="comic-btn bg-emerald-400 hover:bg-emerald-300 text-stone-900 font-comic font-black text-sm px-8 py-3 rounded-2xl shadow-md">
+                        🚀 VÀO ĐẤU TRƯỜNG NGAY!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Question Manager -->
+    <div id="modal-questions" class="fixed inset-0 bg-stone-900/80 z-50 hidden items-center justify-center p-4">
+        <div class="bg-amber-50 rounded-3xl comic-box-lg max-w-lg w-full p-5 max-h-[85vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center border-b-2 border-stone-900 pb-2.5 mb-3">
+                <h3 class="font-comic text-lg font-black text-stone-900 uppercase flex items-center gap-2"><span>📝</span> Quản Lý Câu Hỏi Quiz</h3>
+                <button onclick="closeQuestionModal()" class="comic-btn bg-rose-400 hover:bg-rose-300 text-white font-black w-8 h-8 rounded-xl flex items-center justify-center">✕</button>
+            </div>
+            <div id="question-list-container" class="flex-1 overflow-y-auto space-y-2.5 pr-1"></div>
+        </div>
+    </div>
+
+    <!-- Modal Victory -->
+    <div id="modal-victory" class="fixed inset-0 bg-stone-900/85 z-50 hidden items-center justify-center p-4">
+        <div class="bg-amber-100 rounded-3xl comic-box-lg max-w-sm w-full p-6 text-center shadow-2xl transform scale-105">
+            <div class="text-6xl mb-2 animate-bounce">🏆</div>
+            <h2 class="font-comic text-3xl font-black text-amber-600 uppercase text-stroke-sm">CHIẾN THẮNG!</h2>
+            <p id="victory-winner-name" class="font-comic text-xl font-black text-stone-900 my-3 bg-white border-2 border-stone-900 rounded-xl py-2 shadow-inner">NHÓM 1</p>
+            <button onclick="resetFullGame(true)" class="comic-btn bg-emerald-400 hover:bg-emerald-300 text-stone-900 font-comic font-black text-base px-6 py-3 rounded-2xl w-full shadow-md">
+                🔄 CHƠI VÁN MỚI!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // AVATARS DỊ BIỆT RIÊNG CHO 4 NHÂN VẬT
+        const CHARACTER_AVATARS = [
+            `<svg viewBox="0 0 100 100" class="w-full h-full drop-shadow">
+                <circle cx="50" cy="50" r="45" fill="#fbcfe8" stroke="#1c1917" stroke-width="4"/>
+                <path d="M25,35 L40,15 L50,30 L60,15 L75,35 Z" fill="#db2777" stroke="#1c1917" stroke-width="3"/>
+                <rect x="30" y="42" width="40" height="15" rx="5" fill="#1c1917"/>
+                <circle cx="40" cy="50" r="4" fill="#38bdf8"/><circle cx="60" cy="50" r="4" fill="#38bdf8"/>
+                <path d="M40,70 Q50,60 60,70" fill="none" stroke="#1c1917" stroke-width="4" stroke-linecap="round"/>
+                <rect x="46" y="66" width="8" height="6" fill="#ffffff" stroke="#1c1917" stroke-width="2"/>
+            </svg>`,
+            `<svg viewBox="0 0 100 100" class="w-full h-full drop-shadow">
+                <circle cx="50" cy="50" r="45" fill="#bae6fd" stroke="#1c1917" stroke-width="4"/>
+                <path d="M20,38 L80,38 L70,22 L30,22 Z" fill="#0284c7" stroke="#1c1917" stroke-width="3"/>
+                <path d="M60,38 L90,42 L65,46 Z" fill="#0284c7" stroke="#1c1917" stroke-width="3"/>
+                <circle cx="38" cy="52" r="6" fill="#1c1917"/><circle cx="62" cy="52" r="6" fill="#1c1917"/>
+                <path d="M35,70 Q50,80 65,70" fill="none" stroke="#1c1917" stroke-width="4" stroke-linecap="round"/>
+                <line x1="45" y1="42" x2="55" y2="40" stroke="#1c1917" stroke-width="3"/>
+            </svg>`,
+            `<svg viewBox="0 0 100 100" class="w-full h-full drop-shadow">
+                <circle cx="50" cy="50" r="45" fill="#f3e8ff" stroke="#1c1917" stroke-width="4"/>
+                <circle cx="30" cy="30" r="14" fill="#a855f7" stroke="#1c1917" stroke-width="3"/>
+                <circle cx="70" cy="30" r="14" fill="#a855f7" stroke="#1c1917" stroke-width="3"/>
+                <circle cx="50" cy="25" r="16" fill="#a855f7" stroke="#1c1917" stroke-width="3"/>
+                <circle cx="38" cy="50" r="7" fill="#ffffff" stroke="#1c1917" stroke-width="3"/><circle cx="38" cy="50" r="3" fill="#1c1917"/>
+                <circle cx="62" cy="50" r="7" fill="#ffffff" stroke="#1c1917" stroke-width="3"/><circle cx="62" cy="50" r="3" fill="#1c1917"/>
+                <path d="M42,72 Q50,62 58,72" fill="none" stroke="#1c1917" stroke-width="4" stroke-linecap="round"/>
+            </svg>`,
+            `<svg viewBox="0 0 100 100" class="w-full h-full drop-shadow">
+                <circle cx="50" cy="50" r="45" fill="#d1fae5" stroke="#1c1917" stroke-width="4"/>
+                <path d="M30,35 Q50,15 70,35 L50,25 Z" fill="#059669" stroke="#1c1917" stroke-width="3"/>
+                <circle cx="38" cy="50" r="12" fill="none" stroke="#1c1917" stroke-width="4"/><circle cx="38" cy="50" r="4" fill="#1c1917"/>
+                <circle cx="62" cy="50" r="12" fill="none" stroke="#1c1917" stroke-width="4"/><circle cx="62" cy="50" r="4" fill="#1c1917"/>
+                <line x1="50" y1="50" x2="50" y2="50" stroke="#1c1917" stroke-width="4"/>
+                <path d="M42,70 L58,70" stroke="#1c1917" stroke-width="4" stroke-linecap="round"/>
+            </svg>`
+        ];
+
+        // WEAPONS DEFINITION
+        const WEAPONS = [
+            { id: 1, name: 'Chiếc Dép Tổ Ong', minDmg: 1, maxDmg: 2, hitWord: 'CHÁT!', color: '#fbbf24', svg: `<svg viewBox="0 0 80 80" class="w-full h-full drop-shadow"><rect x="20" y="10" width="40" height="60" rx="20" fill="#fde047" stroke="#1c1917" stroke-width="4"/><circle cx="32" cy="35" r="3.5" fill="#1c1917"/><circle cx="48" cy="35" r="3.5" fill="#1c1917"/><circle cx="40" cy="50" r="3" fill="#1c1917"/></svg>` },
+            { id: 2, name: 'Viên Đá Cuội', minDmg: 2, maxDmg: 3, hitWord: 'BỐP!', color: '#a8a29e', svg: `<svg viewBox="0 0 80 80" class="w-full h-full drop-shadow"><path d="M15,45 Q15,20 40,15 Q65,15 65,45 Q65,65 40,65 Q15,65 15,45 Z" fill="#a8a29e" stroke="#1c1917" stroke-width="4"/><circle cx="35" cy="35" r="4" fill="#78716c"/><circle cx="50" cy="45" r="3" fill="#78716c"/></svg>` },
+            { id: 3, name: 'Cái Chổi Đót', minDmg: 3, maxDmg: 4, hitWord: 'VỤT!', color: '#eab308', svg: `<svg viewBox="0 0 80 80" class="w-full h-full drop-shadow"><rect x="36" y="8" width="8" height="38" fill="#b45309" stroke="#1c1917" stroke-width="3"/><path d="M18,46 L62,46 L72,76 L8,76 Z" fill="#facc15" stroke="#1c1917" stroke-width="4"/><line x1="28" y1="46" x2="24" y2="76" stroke="#ca8a04" stroke-width="2"/><line x1="52" y1="46" x2="56" y2="76" stroke="#ca8a04" stroke-width="2"/></svg>` },
+            { id: 4, name: 'Cái Ghế Nhựa Đỏ', minDmg: 4, maxDmg: 5, hitWord: 'BINH!', color: '#ef4444', svg: `<svg viewBox="0 0 80 80" class="w-full h-full drop-shadow"><rect x="15" y="22" width="50" height="18" rx="5" fill="#ef4444" stroke="#1c1917" stroke-width="4"/><line x1="22" y1="40" x2="16" y2="72" stroke="#dc2626" stroke-width="6" stroke-linecap="round"/><line x1="58" y1="40" x2="64" y2="72" stroke="#dc2626" stroke-width="6" stroke-linecap="round"/><circle cx="40" cy="31" r="4" fill="#1c1917"/></svg>` },
+            { id: 5, name: 'Cái Điếu Cày', minDmg: 5, maxDmg: 6, hitWord: 'BỐP CHÁT!', color: '#84cc16', svg: `<svg viewBox="0 0 80 80" class="w-full h-full drop-shadow"><rect x="34" y="10" width="12" height="60" rx="4" fill="#65a30d" stroke="#1c1917" stroke-width="4"/><path d="M46,48 L62,38 L68,48 Z" fill="#b45309" stroke="#1c1917" stroke-width="3"/><circle cx="65" cy="43" r="4" fill="#1c1917"/></svg>` },
+            { id: 6, name: 'Cái Tivi Đời Cổ', minDmg: 6, maxDmg: 6, isCrit: true, hitWord: 'XOẢNG! -6!', color: '#8b5cf6', svg: `<svg viewBox="0 0 80 80" class="w-full h-full drop-shadow"><rect x="10" y="18" width="60" height="48" rx="8" fill="#7c3aed" stroke="#1c1917" stroke-width="4"/><rect x="16" y="24" width="38" height="36" rx="4" fill="#38bdf8" stroke="#1c1917" stroke-width="3"/><line x1="58" y1="26" x2="68" y2="16" stroke="#1c1917" stroke-width="4"/><line x1="58" y1="36" x2="68" y2="36" stroke="#1c1917" stroke-width="4"/></svg>` }
+        ];
+
+        const FUNNY_NAMES = ['Tí Sún', 'Tèo Bựa', 'Mắm Chua', 'Bờm Ngố', 'Cò Lêu Lêu', 'Nhím Xù', 'Út Ném Đá', 'Bi Siêu Quậy'];
+        const MAX_HP = 50;
+
+        let teams = [
+            { id: 0, name: 'Nhóm 1 • Tí Sún', shortName: 'Nhóm 1', playerName: 'Tí Sún', badgeBg: 'bg-rose-500', hp: MAX_HP, isLocked: false, lockedByClientId: null, lockedByName: '' },
+            { id: 1, name: 'Nhóm 2 • Tèo Bựa', shortName: 'Nhóm 2', playerName: 'Tèo Bựa', badgeBg: 'bg-sky-500', hp: MAX_HP, isLocked: false, lockedByClientId: null, lockedByName: '' },
+            { id: 2, name: 'Nhóm 3 • Mắm Mếu', shortName: 'Nhóm 3', playerName: 'Mắm Mếu', badgeBg: 'bg-fuchsia-500', hp: MAX_HP, isLocked: false, lockedByClientId: null, lockedByName: '' },
+            { id: 3, name: 'Nhóm 4 • Bờm Ngố', shortName: 'Nhóm 4', playerName: 'Bờm Ngố', badgeBg: 'bg-emerald-500', hp: MAX_HP, isLocked: false, lockedByClientId: null, lockedByName: '' }
+        ];
+
+        let questions = [
+            { topic: 'Đố Vui', q: 'Cái gì càng kéo càng ngắn?', options: ['Sợi dây', 'Điếu thuốc lá', 'Con đường', 'Thước kẻ'], correct: 1 },
+            { topic: 'Học Đường', q: 'Loại dép nào có hàng chục lỗ thoáng khí huyền thoại?', options: ['Dép lào', 'Dép tổ ong', 'Dép tông', 'Dép cao su'], correct: 1 },
+            { topic: 'Khoa Học', q: 'Hành tinh nào được gọi là Hành tinh Đỏ?', options: ['Sao Kim', 'Sao Hỏa', 'Sao Mộc', 'Sao Thổ'], correct: 1 },
+            { topic: 'Dân Gian', q: 'Con gì đầu dê mình ốc?', options: ['Con dốc', 'Con đường', 'Con sông', 'Con dao'], correct: 0 },
+            { topic: 'Mẹo Vặt', q: 'Bệnh gì bác sĩ phải bó tay?', options: ['Gãy tay', 'Đau đầu', 'Đau bụng', 'Sốt xuất huyết'], correct: 0 }
+        ];
+
+        let currentQuestionIndex = 0;
+        let roundNumber = 1;
+        let gamePhase = 'QUIZ_OPEN';
+        let activeTeamId = null;
+        let lockedOutTeams = new Set();
+        let answerTimer = null;
+        let answerSecondsLeft = 10;
+        let soundEnabled = true;
+        let currentClientId = 'client-' + Math.random().toString(36).substring(2, 9);
+        let myTeamId = null;
+        let isSpectatorMode = false;
+
+        let netState = {
+            peer: null,
+            isHost: false,
+            isConnected: false,
+            roomCode: '',
+            clients: {},
+            hostConn: null,
+            broadcastChannel: null
+        };
+
+        function updateCombatLog(text) {
+            const el = document.getElementById('combat-log-latest');
+            if (el) el.textContent = text;
+        }
+
+        function playSFX(type) {
+            if (!soundEnabled) return;
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = new AudioCtx();
+                const now = ctx.currentTime;
+                if (type === 'buzz') {
+                    const osc = ctx.createOscillator(); const g = ctx.createGain();
+                    osc.frequency.setValueAtTime(500, now); osc.frequency.exponentialRampToValueAtTime(850, now + 0.12);
+                    g.gain.setValueAtTime(0.2, now); g.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                    osc.connect(g); g.connect(ctx.destination); osc.start(now); osc.stop(now + 0.15);
+                } else if (type === 'hit') {
+                    const osc = ctx.createOscillator(); const g = ctx.createGain();
+                    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(160, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.28);
+                    g.gain.setValueAtTime(0.35, now); g.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+                    osc.connect(g); g.connect(ctx.destination); osc.start(now); osc.stop(now + 0.28);
+                }
+            } catch (e) {}
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('btn-sound').innerText = soundEnabled ? '🔊' : '🔇';
+        }
+
+        function spawnFloatingText(teamIdx, text, colorClass = 'text-rose-500') {
+            const anchor = document.getElementById(`avatar-anchor-${teamIdx}`);
+            if (!anchor) return;
+            const rect = anchor.getBoundingClientRect();
+            
+            const div = document.createElement('div');
+            div.className = `fixed z-50 font-comic font-black text-2xl text-stroke-sm ${colorClass} anim-float-up pointer-events-none`;
+            div.style.left = `${rect.left + rect.width / 2 - 30}px`;
+            div.style.top = `${rect.top}px`;
+            div.innerText = text;
+            
+            document.getElementById('fx-layer').appendChild(div);
+            setTimeout(() => div.remove(), 900);
+        }
+
+        function playThrowAnimation(attackerIdx, victimIdx, weaponSvgHtml, onComplete) {
+            const attackerAnchor = document.getElementById(`avatar-anchor-${attackerIdx}`);
+            const victimAnchor = document.getElementById(`avatar-anchor-${victimIdx}`);
+            if (!attackerAnchor || !victimAnchor) {
+                if (onComplete) onComplete();
+                return;
+            }
+
+            const r1 = attackerAnchor.getBoundingClientRect();
+            const r2 = victimAnchor.getBoundingClientRect();
+
+            const dx = (r2.left + r2.width / 2) - (r1.left + r1.width / 2);
+            const dy = (r2.top + r2.height / 2) - (r1.top + r1.height / 2);
+
+            const flyer = document.createElement('div');
+            flyer.className = `fixed z-50 w-16 h-16 pointer-events-none anim-throw`;
+            flyer.style.left = `${r1.left + r1.width / 2 - 32}px`;
+            flyer.style.top = `${r1.top + r1.height / 2 - 32}px`;
+            flyer.style.setProperty('--dest-x', `${dx}px`);
+            flyer.style.setProperty('--dest-y', `${dy}px`);
+            flyer.innerHTML = weaponSvgHtml;
+
+            document.getElementById('fx-layer').appendChild(flyer);
+
+            setTimeout(() => {
+                flyer.remove();
+                if (onComplete) onComplete();
+            }, 700);
+        }
+
+        function renderLobbyCharacters() {
+            const grid = document.getElementById('lobby-characters-grid');
+            if (!grid) return;
+
+            grid.innerHTML = teams.map((team, idx) => {
+                const isMine = team.isLocked && team.lockedByClientId === currentClientId;
+                const isTakenByOther = team.isLocked && team.lockedByClientId !== currentClientId;
+
+                return `
+                    <div onclick="${isTakenByOther || isSpectatorMode ? '' : `selectLobbySlot(${idx})`}"
+                         class="comic-box rounded-2xl p-4 flex flex-col items-center justify-between text-center transition-all shadow-md ${
+                             isMine ? 'bg-emerald-100 ring-4 ring-emerald-500 scale-[1.02] cursor-pointer'
+                             : isTakenByOther ? 'bg-stone-200 opacity-70 cursor-not-allowed'
+                             : isSpectatorMode ? 'bg-amber-50 opacity-90 cursor-default'
+                             : 'bg-amber-50 hover:bg-amber-100 cursor-pointer hover:-translate-y-1'
+                         }">
+                        
+                        <div class="w-full flex items-center justify-between mb-2">
+                            <span class="${team.badgeBg} text-white font-black text-[11px] px-2 py-0.5 rounded border border-stone-900 shadow-sm">
+                                NHÓM ${idx + 1}
+                            </span>
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full border border-stone-900 ${
+                                isMine ? 'bg-amber-300 text-stone-900'
+                                : isTakenByOther ? 'bg-rose-600 text-white'
+                                : 'bg-emerald-200 text-emerald-900'
+                            }">
+                                ${isMine ? '⭐ BẠN CHỌN' : isTakenByOther ? '🔒 ĐÃ KHÓA' : '🟢 CÒN TRỐNG'}
+                            </span>
+                        </div>
+
+                        <div class="my-2">
+                            <div class="w-24 h-24 rounded-full border-3 border-stone-900 flex items-center justify-center anim-idle shadow-xl overflow-hidden bg-white">
+                                ${CHARACTER_AVATARS[idx]}
+                            </div>
+                        </div>
+
+                        <div class="w-full">
+                            <input type="text"
+                                   id="input-name-${idx}"
+                                   value="${team.playerName}"
+                                   maxlength="14"
+                                   ${isTakenByOther || isSpectatorMode ? 'disabled' : ''}
+                                   onchange="updateTeamName(${idx}, this.value)"
+                                   oninput="updateTeamName(${idx}, this.value)"
+                                   class="w-full text-center font-comic font-black text-xs bg-white border-2 border-stone-900 rounded-xl px-2.5 py-1.5 mb-2 focus:outline-none shadow-inner"/>
+
+                            <div class="flex items-center justify-between gap-1">
+                                <button onclick="event.stopPropagation(); randomizeTeamName(${idx})" ${isTakenByOther || isSpectatorMode ? 'disabled' : ''} class="comic-btn bg-amber-300 text-[10px] font-black px-2 py-1 rounded-lg">🎲 Tên hài</button>
+                                <span class="text-[10px] font-bold text-stone-600">${isMine ? 'Bạn giữ' : isTakenByOther ? `Bởi ${team.lockedByName}` : 'Bấm chọn'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleSpectatorMode(checked) {
+            isSpectatorMode = checked;
+            if (isSpectatorMode) {
+                myTeamId = null;
+                teams.forEach(t => {
+                    if (t.lockedByClientId === currentClientId) {
+                        t.isLocked = false;
+                        t.lockedByClientId = null;
+                        t.lockedByName = '';
+                    }
+                });
+            }
+            renderLobbyCharacters();
+            renderAllTeams();
+        }
+
+        function selectLobbySlot(idx) {
+            if (isSpectatorMode) return;
+            const team = teams[idx];
+            if (!team) return;
+            if (team.isLocked && team.lockedByClientId !== currentClientId) return;
+
+            const nameInput = document.getElementById(`input-name-${idx}`);
+            const name = nameInput ? nameInput.value.trim() : team.playerName;
+
+            teams.forEach(t => {
+                if (t.lockedByClientId === currentClientId) {
+                    t.isLocked = false;
+                    t.lockedByClientId = null;
+                    t.lockedByName = '';
+                }
+            });
+
+            team.isLocked = true;
+            team.lockedByClientId = currentClientId;
+            team.lockedByName = name;
+            team.playerName = name;
+            team.name = `${team.shortName} • ${name}`;
+            myTeamId = idx;
+
+            sendNetMessage({ type: 'SELECT_SLOT', teams });
+            renderLobbyCharacters();
+            renderAllTeams();
+        }
+
+        function updateTeamName(idx, val) {
+            const clean = val.trim() || teams[idx].shortName;
+            teams[idx].playerName = clean;
+            teams[idx].name = `${teams[idx].shortName} • ${clean}`;
+            if (teams[idx].isLocked && teams[idx].lockedByClientId === currentClientId) {
+                teams[idx].lockedByName = clean;
+            }
+            sendNetMessage({ type: 'SELECT_SLOT', teams });
+            renderAllTeams();
+        }
+
+        function randomizeTeamName(idx) {
+            const randomName = FUNNY_NAMES[Math.floor(Math.random() * FUNNY_NAMES.length)];
+            const input = document.getElementById(`input-name-${idx}`);
+            if (input) input.value = randomName;
+            updateTeamName(idx, randomName);
+        }
+
+        function openLobbyModal() {
+            document.getElementById('home-lobby-screen').classList.remove('hidden');
+            renderLobbyCharacters();
+        }
+
+        function enterArenaFromHome() {
+            document.getElementById('home-lobby-screen').classList.add('hidden');
+            renderAllTeams();
+            loadCurrentQuestion();
+        }
+
+        function renderAllTeams() {
+            teams.forEach((team, idx) => {
+                const card = document.getElementById(`team-card-${idx}`);
+                if (!card) return;
+
+                const hpPercent = Math.max(0, Math.min(100, (team.hp / MAX_HP) * 100));
+                const hpBarColor = team.hp <= 15 ? 'bg-rose-500 animate-pulse' : team.hp <= 30 ? 'bg-amber-400' : 'bg-emerald-500';
+                const isMyTeam = idx === myTeamId;
+
+                card.innerHTML = `
+                    <div class="relative flex flex-col items-center">
+                        <div class="bg-white/95 backdrop-blur-sm rounded-2xl comic-box px-3 py-2 w-48 mb-1.5 text-center shadow-lg ${isMyTeam ? 'ring-4 ring-amber-400' : ''}">
+                            <div class="flex items-center justify-between gap-1 mb-1">
+                                <span class="${team.badgeBg} text-white font-black text-[10px] px-2 py-0.5 rounded border border-stone-900 shadow-sm">
+                                    #${idx + 1} ${isMyTeam ? '(BẠN)' : ''}
+                                </span>
+                                <span class="font-comic font-black text-xs text-stone-900 truncate">
+                                    ${team.name}
+                                </span>
+                            </div>
+                            <div class="relative w-full h-4 bg-stone-800 rounded-xl border-2 border-stone-900 overflow-hidden p-0.5 shadow-inner">
+                                <div class="${hpBarColor} h-full rounded-lg transition-all duration-300" style="width: ${hpPercent}%"></div>
+                            </div>
+                            <div class="text-[11px] font-black text-stone-800 mt-0.5">${team.hp}/${MAX_HP} HP</div>
+                        </div>
+
+                        <div id="avatar-anchor-${idx}" class="relative flex items-center justify-center cursor-pointer transform hover:scale-105 transition-transform" onclick="handleTeamBuzz(${idx})">
+                            <div class="w-24 h-24 rounded-full border-3 border-stone-900 flex items-center justify-center anim-idle shadow-xl overflow-hidden bg-white">
+                                ${CHARACTER_AVATARS[idx]}
+                            </div>
+                            ${team.hp <= 0 ? `<div class="absolute inset-0 bg-stone-900/80 rounded-full flex items-center justify-center"><span class="bg-stone-900 text-rose-400 font-comic font-black text-xs px-3 py-1 rounded-lg border-2 border-rose-400 shadow animate-bounce">💀 BỊ LOẠI</span></div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            renderBuzzerButtons();
+        }
+
+        function renderBuzzerButtons() {
+            const grid = document.getElementById('buzzer-grid');
+            if (!grid) return;
+
+            grid.innerHTML = teams.map((team, idx) => {
+                const isEliminated = team.hp <= 0;
+                const isLocked = lockedOutTeams.has(idx);
+                const canBuzz = gamePhase === 'QUIZ_OPEN' && !isEliminated && !isLocked;
+
+                return `
+                    <button onclick="handleTeamBuzz(${idx})"
+                        ${!canBuzz ? 'disabled' : ''}
+                        class="comic-btn ${team.badgeBg} text-white font-comic font-black py-2 px-2 rounded-xl flex flex-col items-center justify-center leading-tight shadow-md">
+                        <span class="text-xs">🔔 ${team.shortName}</span>
+                        <span class="text-[10px] opacity-95 truncate max-w-full font-bold">${isEliminated ? 'Hết máu' : isLocked ? 'Sai rồi' : team.playerName}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function loadCurrentQuestion() {
+            clearInterval(answerTimer);
+            answerTimer = null;
+            lockedOutTeams.clear();
+            activeTeamId = null;
+            gamePhase = 'QUIZ_OPEN';
+
+            const answeringBanner = document.getElementById('answering-banner');
+            if (answeringBanner) {
+                answeringBanner.classList.add('hidden');
+                answeringBanner.classList.remove('flex');
+            }
+
+            document.getElementById('timer-bar').style.width = '100%';
+            document.getElementById('round-badge').innerText = `CÂU ${roundNumber}`;
+            document.getElementById('phase-status-text').innerText = '⚡ Bấm chuông (1-4) giành quyền!';
+
+            const qObj = questions[currentQuestionIndex % questions.length];
+            document.getElementById('question-topic').innerText = qObj.topic || 'Đố Vui';
+            document.getElementById('question-text').innerText = qObj.q;
+
+            renderOptionsGrid(qObj, false);
+            renderAllTeams();
+        }
+
+        function renderOptionsGrid(qObj, reveal = false, chosenIdx = -1) {
+            const labels = ['A', 'B', 'C', 'D'];
+            const grid = document.getElementById('options-grid');
+            if (!grid) return;
+
+            grid.innerHTML = qObj.options.map((optText, i) => {
+                let bgClass = 'bg-white hover:bg-amber-100 text-stone-900';
+                if (reveal) {
+                    if (i === qObj.correct) bgClass = 'bg-emerald-400 text-stone-900 shadow-md ring-2 ring-stone-900';
+                    else if (i === chosenIdx) bgClass = 'bg-rose-400 text-white shadow-md';
+                }
+                const disabled = gamePhase !== 'TEAM_BUZZED' || (netState.isConnected && !netState.isHost && activeTeamId !== myTeamId);
+
+                return `
+                    <button onclick="handleSelectAnswer(${i})"
+                        ${disabled ? 'disabled' : ''}
+                        class="comic-btn ${bgClass} rounded-2xl p-2.5 text-xs text-left flex items-center gap-2 font-bold shadow-sm">
+                        <span class="w-6 h-6 text-xs rounded-xl bg-stone-900 text-amber-300 font-comic font-black flex items-center justify-center shrink-0 shadow">
+                            ${labels[i]}
+                        </span>
+                        <span class="leading-tight truncate">${optText}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function handleTeamBuzz(teamIdx) {
+            if (gamePhase !== 'QUIZ_OPEN') return;
+            if (teams[teamIdx].hp <= 0 || lockedOutTeams.has(teamIdx)) return;
+
+            if (netState.isConnected && !netState.isHost) {
+                if (myTeamId !== null && myTeamId !== teamIdx) return;
+                sendNetMessage({ type: 'BUZZ_REQ', teamIdx, clientId: currentClientId });
+                return;
+            }
+
+            executeBuzz(teamIdx);
+        }
+
+        function executeBuzz(teamIdx) {
+            playSFX('buzz');
+            gamePhase = 'TEAM_BUZZED';
+            activeTeamId = teamIdx;
+
+            const answeringBanner = document.getElementById('answering-banner');
+            answeringBanner.classList.remove('hidden');
+            answeringBanner.classList.add('flex');
+            document.getElementById('answering-team-text').innerText = `🔔 ${teams[teamIdx].name.toUpperCase()} GIÀNH QUYỀN!`;
+
+            const qObj = questions[currentQuestionIndex % questions.length];
+            renderOptionsGrid(qObj, false);
+            renderAllTeams();
+            startAnswerTimer(teamIdx);
+            updateCombatLog(`🔔 ${teams[teamIdx].name} đã bấm chuông giành quyền trả lời!`);
+
+            sendNetMessage({ type: 'BUZZ_EVENT', teamIdx });
+        }
+
+        function startAnswerTimer(teamIdx) {
+            clearInterval(answerTimer);
+            answerSecondsLeft = 10;
+            const countdown = document.getElementById('answer-countdown');
+            const timerBar = document.getElementById('timer-bar');
+            if (countdown) countdown.textContent = '10s';
+
+            answerTimer = setInterval(() => {
+                answerSecondsLeft--;
+                if (countdown) countdown.textContent = `${answerSecondsLeft}s`;
+                if (timerBar) timerBar.style.width = `${answerSecondsLeft * 10}%`;
+
+                if (answerSecondsLeft <= 0) {
+                    clearInterval(answerTimer);
+                    handleWrongOrTimeout(teamIdx, -1, true);
+                }
+            }, 1000);
+        }
+
+        function handleSelectAnswer(optionIdx) {
+            if (gamePhase !== 'TEAM_BUZZED' || activeTeamId === null) return;
+            if (netState.isConnected && !netState.isHost && activeTeamId !== myTeamId) return;
+
+            clearInterval(answerTimer);
+            const qObj = questions[currentQuestionIndex % questions.length];
+            const teamIdx = activeTeamId;
+
+            if (optionIdx === qObj.correct) {
+                renderOptionsGrid(qObj, true, optionIdx);
+                spawnFloatingText(teamIdx, 'ĐÚNG!', 'text-emerald-500');
+                updateCombatLog(`✅ ${teams[teamIdx].name} trả lời ĐÚNG! Chuẩn bị quay xúc xắc ném đồ!`);
+                setTimeout(() => openAttackOverlay(teamIdx), 900);
+            } else {
+                spawnFloatingText(teamIdx, 'SAI!', 'text-rose-600');
+                handleWrongOrTimeout(teamIdx, optionIdx, false);
+            }
+        }
+
+        function handleWrongOrTimeout(teamIdx, chosenIdx, isTimeout) {
+            clearInterval(answerTimer);
+            lockedOutTeams.add(teamIdx);
+            const qObj = questions[currentQuestionIndex % questions.length];
+
+            updateCombatLog(isTimeout ? `⏰ ${teams[teamIdx].name} đã hết thời gian!` : `❌ ${teams[teamIdx].name} chọn sai đáp án!`);
+
+            const remaining = teams.filter((t, i) => t.hp > 0 && !lockedOutTeams.has(i));
+            if (remaining.length === 0) {
+                renderOptionsGrid(qObj, true, chosenIdx);
+                setTimeout(() => nextQuestion(), 1600);
+            } else {
+                gamePhase = 'QUIZ_OPEN';
+                activeTeamId = null;
+                document.getElementById('answering-banner').classList.add('hidden');
+                renderOptionsGrid(qObj, false);
+                renderAllTeams();
+            }
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex = (currentQuestionIndex + 1) % questions.length;
+            roundNumber++;
+            loadCurrentQuestion();
+        }
+
+        function openAttackOverlay(attackerIdx) {
+            gamePhase = 'ATTACK_READY';
+            activeTeamId = attackerIdx;
+
+            const overlay = document.getElementById('attack-overlay');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+            }
+
+            document.getElementById('attack-attacker-title').innerText = `🎉 ${teams[attackerIdx].name} hãy quay xúc xắc!`;
+            document.getElementById('reel-weapon-svg').innerHTML = WEAPONS[0].svg;
+            document.getElementById('reel-weapon-name').innerText = 'Bấm nút quay vũ khí!';
+            document.getElementById('btn-roll-dice').disabled = false;
+        }
+
+        function startWeaponRollSequence() {
+            if (gamePhase !== 'ATTACK_READY') return;
+
+            gamePhase = 'ROLLING';
+            document.getElementById('btn-roll-dice').disabled = true;
+
+            const attackerIdx = activeTeamId;
+            const candidates = teams.filter((t, i) => t.hp > 0 && i !== attackerIdx);
+            if (candidates.length === 0) return;
+
+            const chosenWeapon = WEAPONS[Math.floor(Math.random() * WEAPONS.length)];
+            const chosenVictim = candidates[Math.floor(Math.random() * candidates.length)];
+            const victimIdx = teams.findIndex(t => t.id === chosenVictim.id);
+            const damage = Math.floor(Math.random() * (chosenWeapon.maxDmg - chosenWeapon.minDmg + 1)) + chosenWeapon.minDmg;
+
+            document.getElementById('reel-weapon-svg').innerHTML = chosenWeapon.svg;
+            document.getElementById('reel-weapon-name').innerText = chosenWeapon.name;
+            document.getElementById('roulette-target-name').innerText = `🎯 Mục tiêu: ${chosenVictim.name}`;
+
+            let rollCount = 0;
+            const rollInterval = setInterval(() => {
+                const randomW = WEAPONS[Math.floor(Math.random() * WEAPONS.length)];
+                document.getElementById('reel-weapon-svg').innerHTML = randomW.svg;
+                document.getElementById('reel-weapon-name').innerText = randomW.name;
+                rollCount++;
+                if (rollCount > 8) {
+                    clearInterval(rollInterval);
+                    document.getElementById('reel-weapon-svg').innerHTML = chosenWeapon.svg;
+                    document.getElementById('reel-weapon-name').innerText = chosenWeapon.name;
+
+                    setTimeout(() => {
+                        playThrowAnimation(attackerIdx, victimIdx, chosenWeapon.svg, () => {
+                            document.getElementById('attack-overlay').classList.add('hidden');
+                            playSFX('hit');
+
+                            document.getElementById('arena-container').classList.add('anim-shake');
+                            setTimeout(() => document.getElementById('arena-container').classList.remove('anim-shake'), 400);
+
+                            chosenVictim.hp = Math.max(0, chosenVictim.hp - damage);
+                            spawnFloatingText(victimIdx, `-${damage} HP`, 'text-rose-600');
+                            spawnFloatingText(victimIdx, chosenWeapon.hitWord, 'text-amber-500');
+
+                            updateCombatLog(`💥 ${teams[attackerIdx].shortName} ném [${chosenWeapon.name}] trúng mặt ${chosenVictim.name} gây -${damage} HP!`);
+
+                            renderAllTeams();
+                            if (chosenVictim.hp <= 0) {
+                                checkWinCondition();
+                            } else {
+                                setTimeout(() => nextQuestion(), 1600);
+                            }
+                        });
+                    }, 400);
+                }
+            }, 90);
+        }
+
+        function checkWinCondition() {
+            const alive = teams.filter(t => t.hp > 0);
+            if (alive.length <= 1) {
+                gamePhase = 'GAME_OVER';
+                const winner = alive[0] || teams[0];
+                document.getElementById('victory-winner-name').innerText = winner.name;
+                document.getElementById('modal-victory').classList.remove('hidden');
+                document.getElementById('modal-victory').classList.add('flex');
+            }
+        }
+
+        function resetFullGame(announce = true) {
+            document.getElementById('modal-victory').classList.add('hidden');
+            teams.forEach(t => t.hp = MAX_HP);
+            roundNumber = 1;
+            currentQuestionIndex = 0;
+            if (announce) updateCombatLog('🔄 Đã khởi tạo lại ván đấu mới!');
+            loadCurrentQuestion();
+        }
+
+        function openQuestionModal() {
+            document.getElementById('modal-questions').classList.remove('hidden');
+            document.getElementById('modal-questions').classList.add('flex');
+            renderQuestionListModal();
+        }
+
+        function closeQuestionModal() {
+            document.getElementById('modal-questions').classList.add('hidden');
+            document.getElementById('modal-questions').classList.remove('flex');
+        }
+
+        function renderQuestionListModal() {
+            const list = document.getElementById('question-list-container');
+            if (!list) return;
+
+            list.innerHTML = questions.map((q, i) => `
+                <div class="bg-white border-2 border-stone-900 rounded-2xl p-3 text-xs shadow-sm flex items-center justify-between">
+                    <div>
+                        <span class="bg-amber-300 border border-stone-900 px-2 py-0.5 rounded-lg font-black mr-2">Câu ${i+1}: ${q.topic}</span>
+                        <strong class="text-stone-900">${q.q}</strong>
+                    </div>
+                    <span class="text-[11px] font-black text-emerald-700 bg-emerald-100 px-2 py-1 rounded-lg border border-stone-900 shrink-0">Đáp án: ${['A','B','C','D'][q.correct]}</span>
+                </div>
+            `).join('');
+        }
+
+        // NETWORKING LOGIC WITH PEERJS & BROADCASTCHANNEL
+        function createOnlineRoom() {
+            const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+            netState.roomCode = code;
+            netState.isHost = true;
+            netState.isConnected = true;
+
+            const chk = document.getElementById('chk-spectator');
+            if (chk) chk.checked = true;
+            toggleSpectatorMode(true);
+
+            initBroadcastChannel(code);
+
+            document.getElementById('top-room-badge').classList.remove('hidden');
+            document.getElementById('top-room-badge').classList.add('flex');
+            document.getElementById('top-room-code').innerText = code;
+            document.getElementById('role-badge').innerText = 'TRỌNG TÀI / HOST';
+
+            updateCombatLog(`👑 Đã khởi tạo Phòng Trọng Tài [${code}]! Gửi mã cho 4 người chơi để cùng vào chiến.`);
+        }
+
+        function joinOnlineRoom() {
+            const code = document.getElementById('input-join-code').value.trim().toUpperCase();
+            if (code.length < 4) return;
+
+            netState.roomCode = code;
+            netState.isHost = false;
+            netState.isConnected = true;
+
+            initBroadcastChannel(code);
+
+            document.getElementById('top-room-badge').classList.remove('hidden');
+            document.getElementById('top-room-badge').classList.add('flex');
+            document.getElementById('top-room-code').innerText = code;
+            document.getElementById('role-badge').innerText = 'NGƯỜI CHƠI';
+
+            updateCombatLog(`🔗 Đã kết nối vào Phòng [${code}]! Vui lòng chọn 1 nhóm còn trống.`);
+        }
+
+        function initBroadcastChannel(roomCode) {
+            if ('BroadcastChannel' in window) {
+                netState.broadcastChannel = new BroadcastChannel(`room_${roomCode}`);
+                netState.broadcastChannel.onmessage = (event) => {
+                    handleNetPayload(event.data);
+                };
+            }
+        }
+
+        function sendNetMessage(payload) {
+            if (netState.broadcastChannel) {
+                netState.broadcastChannel.postMessage(payload);
+            }
+        }
+
+        function handleNetPayload(data) {
+            if (!data) return;
+            if (data.type === 'SELECT_SLOT') {
+                teams = data.teams;
+                renderLobbyCharacters();
+                renderAllTeams();
+            } else if (data.type === 'BUZZ_REQ' && netState.isHost) {
+                if (gamePhase === 'QUIZ_OPEN') {
+                    executeBuzz(data.teamIdx);
+                }
+            } else if (data.type === 'BUZZ_EVENT' && !netState.isHost) {
+                executeBuzz(data.teamIdx);
+            }
+        }
+
+        window.onload = function() {
+            renderLobbyCharacters();
+            renderAllTeams();
+            loadCurrentQuestion();
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+            const key = e.key;
+            if (gamePhase === 'QUIZ_OPEN' && ['1', '2', '3', '4'].includes(key)) {
+                handleTeamBuzz(parseInt(key, 10) - 1);
+            }
+        });
+    </script>
+</body>
+</html>
